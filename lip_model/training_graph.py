@@ -35,7 +35,9 @@ class TransformerTrainGraph:
 
             vid_inp = x[0] if type(x) is tuple or type(x) is list else x
             istarget = tf.not_equal(vid_inp, 0)
-            self.padding_mask = tf.to_float(tf.reduce_any(istarget, axis=[2, 3, 4]))
+
+            self.padding_mask = tf.reduce_any(istarget, axis=[2, 3, 4])
+            self.padding_mask = tf.cast(self.padding_mask, dtype=tf.float32)
 
             with tf.variable_scope("visual_frontend", reuse=reuse):
                 self.visual_frontend = VisualFrontend(vid_inp)
