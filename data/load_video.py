@@ -22,28 +22,10 @@ def load_video_frames(path, maxlen, pad_mode, grayscale):
     return mat
 
 
-def crop(im):
-    width, height = im.size  # Get dimensions
-    new_width, new_height = 288, 288
-    left = (width - new_width) / 2
-    top = (height - new_height) / 2
-    right = (width + new_width) / 2
-    bottom = (height + new_height) / 2
-    return im.crop((left, top, right, bottom))
-
-
-def resize(im):
-    return im.resize((160, 160))
-
-
 def load_mp4(vid_path, grayscale=False):
 
     container = av.open(vid_path)
-    equal_aspect = lambda im: im.size[0] == im.size[1]
-
-    # ims = [resize(crop(frame.to_image())) for frame in container.decode(video=0)]
     ims = [frame.to_image() for frame in container.decode(video=0)]
-    # ims = [resize(crop(im)) if not equal_aspect(im) else im for im in ims]
 
     if grayscale:
         ims = [im.convert("L") for im in ims]
