@@ -1,20 +1,18 @@
 # -*- coding: utf-8 -*-
-#/usr/bin/python2
-'''
+# /usr/bin/python2
+"""
 June 2017 by kyubyong park. 
 kbpark.linguist@gmail.com.
 https://www.github.com/kyubyong/transformer
-'''
+"""
 
 from __future__ import print_function
 import tensorflow as tf
 import numpy as np
 
-def normalize(inputs, 
-              epsilon = 1e-8,
-              scope="ln",
-              reuse=None):
-    '''Applies layer normalization.
+
+def normalize(inputs, epsilon=1e-8, scope="ln", reuse=None):
+    """Applies layer normalization.
     
     Args:
       inputs: A tensor with 2 or more dimensions, where the first dimension has
@@ -26,34 +24,37 @@ def normalize(inputs,
       
     Returns:
       A tensor with the same shape and data dtype as `inputs`.
-    '''
+    """
     with tf.variable_scope(scope, reuse=reuse):
         inputs_shape = inputs.get_shape()
         params_shape = inputs_shape[-1:]
-    
+
         mean, variance = tf.nn.moments(inputs, [-1], keep_dims=True)
         # beta= tf.Variable(tf.zeros(params_shape))
         # gamma = tf.Variable(tf.ones(params_shape))
-        beta = tf.get_variable('beta',
-                               shape=params_shape,
-                               initializer=tf.zeros_initializer)
-        gamma = tf.get_variable('gamma',
-                              shape=params_shape,
-                              initializer=tf.ones_initializer)
+        beta = tf.get_variable(
+            "beta", shape=params_shape, initializer=tf.zeros_initializer
+        )
+        gamma = tf.get_variable(
+            "gamma", shape=params_shape, initializer=tf.ones_initializer
+        )
 
-        normalized = (inputs - mean) / ( (variance + epsilon) ** (.5) )
+        normalized = (inputs - mean) / ((variance + epsilon) ** (0.5))
         outputs = gamma * normalized + beta
-        
+
     return outputs
 
-def embedding(inputs, 
-              vocab_size, 
-              num_units, 
-              zero_pad=True, 
-              scale=True,
-              scope="embedding", 
-              reuse=None):
-    '''Embeds a given tensor.
+
+def embedding(
+    inputs,
+    vocab_size,
+    num_units,
+    zero_pad=True,
+    scale=True,
+    scope="embedding",
+    reuse=None,
+):
+    """Embeds a given tensor.
 
     Args:
       inputs: A `Tensor` with type `int32` or `int64` containing the ids
@@ -108,31 +109,36 @@ def embedding(inputs,
       [ 0.50208133  0.53509563]
       [ 1.22204471 -0.96587461]]]    
     ```    
-    '''
+    """
     with tf.variable_scope(scope, reuse=reuse):
-        lookup_table = tf.get_variable('lookup_table',
-                                       dtype=tf.float32,
-                                       shape=[vocab_size, num_units],
-                                       initializer=tf.contrib.layers.xavier_initializer())
+        lookup_table = tf.get_variable(
+            "lookup_table",
+            dtype=tf.float32,
+            shape=[vocab_size, num_units],
+            initializer=tf.contrib.layers.xavier_initializer(),
+        )
         if zero_pad:
-            lookup_table = tf.concat((tf.zeros(shape=[1, num_units]),
-                                      lookup_table[1:, :]), 0)
+            lookup_table = tf.concat(
+                (tf.zeros(shape=[1, num_units]), lookup_table[1:, :]), 0
+            )
         outputs = tf.nn.embedding_lookup(lookup_table, inputs)
-        
-        if scale:
-            outputs = outputs * (num_units ** 0.5) 
-            
-    return outputs
-    
 
-def sinusoid_encoding(inputs,
-                      num_units,
-                      zero_pad=True,
-                      scale=True,
-                      scope="positional_encoding",
-                      T = None,
-                      reuse=None):
-    '''Sinusoidal Positional_Encoding.
+        if scale:
+            outputs = outputs * (num_units ** 0.5)
+
+    return outputs
+
+
+def sinusoid_encoding(
+    inputs,
+    num_units,
+    zero_pad=True,
+    scale=True,
+    scope="positional_encoding",
+    T=None,
+    reuse=None,
+):
+    """Sinusoidal Positional_Encoding.
 
     Args:
       inputs: A 2d Tensor with shape of (N, T).
@@ -148,7 +154,7 @@ def sinusoid_encoding(inputs,
     Returns:
         A 'Tensor' with one more rank than inputs's, with the dimensionality should be
          'num_units'
-    '''
+    """
 
     # N, _ = inputs.get_shape().as_list()[:2]
     N = tf.shape(inputs)[0]
@@ -156,9 +162,12 @@ def sinusoid_encoding(inputs,
         position_ind = tf.tile(tf.expand_dims(tf.range(T), 0), [N, 1])
 
         # First part of the PE function: sin and cos argument
-        position_enc = np.array([
-            [pos / np.power(10000, 2.*i/num_units) for i in range(num_units)]
-            for pos in range(T)])
+        position_enc = np.array(
+            [
+                [pos / np.power(10000, 2.0 * i / num_units) for i in range(num_units)]
+                for pos in range(T)
+            ]
+        )
 
         # Second part, apply the cosine to even columns and sin to odds.
         position_enc[:, 0::2] = np.sin(position_enc[:, 0::2])  # dim 2i
@@ -169,30 +178,32 @@ def sinusoid_encoding(inputs,
         lookup_table = tf.cast(lookup_table, tf.float32)
 
         if zero_pad:
-            lookup_table = tf.concat((tf.zeros(shape=[1, num_units]),
-                                      lookup_table[1:, :]), 0)
+            lookup_table = tf.concat(
+                (tf.zeros(shape=[1, num_units]), lookup_table[1:, :]), 0
+            )
         outputs = tf.nn.embedding_lookup(lookup_table, position_ind)
 
         if scale:
-            outputs = outputs * num_units**0.5
+            outputs = outputs * num_units ** 0.5
 
         return outputs
 
 
-
-def multihead_attention(queries, 
-                        keys, 
-                        num_units=None, 
-                        num_heads=8, 
-                        dropout_rate=0,
-                        is_training=True,
-                        causality=False,
-                        key_masks=None,
-                        query_masks = None,
-                        scope="multihead_attention",
-                        cache=None,
-                        reuse=None):
-    '''Applies multihead attention.
+def multihead_attention(
+    queries,
+    keys,
+    num_units=None,
+    num_heads=8,
+    dropout_rate=0,
+    is_training=True,
+    causality=False,
+    key_masks=None,
+    query_masks=None,
+    scope="multihead_attention",
+    cache=None,
+    reuse=None,
+):
+    """Applies multihead attention.
     
     Args:
       queries: A 3d tensor with shape of [N, T_q, C_q].
@@ -208,7 +219,7 @@ def multihead_attention(queries,
         
     Returns
       A 3d tensor with shape of (N, T_q, C)  
-    '''
+    """
 
     with tf.variable_scope(scope, reuse=reuse):
         # Set the fall back option for num_units
@@ -216,90 +227,104 @@ def multihead_attention(queries,
             num_units = queries.get_shape().as_list[-1]
 
         # Linear projections
-        Q = tf.layers.dense(queries, num_units, activation=tf.nn.relu) # (N, T_q, C)
-        K = tf.layers.dense(keys, num_units, activation=tf.nn.relu) # (N, T_k, C)
-        V = tf.layers.dense(keys, num_units, activation=tf.nn.relu) # (N, T_k, C)
+        Q = tf.layers.dense(queries, num_units, activation=tf.nn.relu)  # (N, T_q, C)
+        K = tf.layers.dense(keys, num_units, activation=tf.nn.relu)  # (N, T_k, C)
+        V = tf.layers.dense(keys, num_units, activation=tf.nn.relu)  # (N, T_k, C)
 
         if cache is not None:
             K = cache["k"] = tf.concat([cache["k"], K], axis=1)
             V = cache["v"] = tf.concat([cache["v"], V], axis=1)
 
         # Split and concat
-        Q_ = tf.concat(tf.split(Q, num_heads, axis=2), axis=0) # (h*N, T_q, C/h)
-        K_ = tf.concat(tf.split(K, num_heads, axis=2), axis=0) # (h*N, T_k, C/h)
-        V_ = tf.concat(tf.split(V, num_heads, axis=2), axis=0) # (h*N, T_k, C/h)
+        Q_ = tf.concat(tf.split(Q, num_heads, axis=2), axis=0)  # (h*N, T_q, C/h)
+        K_ = tf.concat(tf.split(K, num_heads, axis=2), axis=0)  # (h*N, T_k, C/h)
+        V_ = tf.concat(tf.split(V, num_heads, axis=2), axis=0)  # (h*N, T_k, C/h)
 
         # Multiplication
-        outputs = tf.matmul(Q_, tf.transpose(K_, [0, 2, 1])) # (h*N, T_q, T_k)
+        outputs = tf.matmul(Q_, tf.transpose(K_, [0, 2, 1]))  # (h*N, T_q, T_k)
 
         # Scale
         outputs = outputs / (K_.get_shape().as_list()[-1] ** 0.5)
 
         # Key Masking
         if cache is None:
-          if key_masks is None:
-            key_masks = tf.sign(tf.abs(tf.reduce_sum(keys, axis=-1))) # (N, T_k)
-          key_masks = tf.tile(key_masks, [num_heads, 1]) # (h*N, T_k)
-          key_masks = tf.tile(tf.expand_dims(key_masks, 1),
-                              [1, tf.shape(queries)[1], 1]) # (h*N, T_q, T_k)
+            if key_masks is None:
+                key_masks = tf.sign(tf.abs(tf.reduce_sum(keys, axis=-1)))  # (N, T_k)
+            key_masks = tf.tile(key_masks, [num_heads, 1])  # (h*N, T_k)
+            key_masks = tf.tile(
+                tf.expand_dims(key_masks, 1), [1, tf.shape(queries)[1], 1]
+            )  # (h*N, T_q, T_k)
 
-          paddings = tf.ones_like(outputs)*(-2**32+1)
-          outputs = tf.where(tf.equal(key_masks, 0), paddings, outputs) # (h*N, T_q, T_k)
+            paddings = tf.ones_like(outputs) * (-(2 ** 32) + 1)
+            outputs = tf.where(
+                tf.equal(key_masks, 0), paddings, outputs
+            )  # (h*N, T_q, T_k)
 
         # Causality = Future blinding
         if causality and cache is None:
-            diag_vals = tf.ones_like(outputs[0, :, :]) # (T_q, T_k)
+            diag_vals = tf.ones_like(outputs[0, :, :])  # (T_q, T_k)
 
             from distutils.version import StrictVersion
 
-            if StrictVersion(tf.__version__) >= StrictVersion('1.5'):
-              tf_lower_triangular = tf.linalg.LinearOperatorLowerTriangular
+            if StrictVersion(tf.__version__) >= StrictVersion("1.5"):
+                tf_lower_triangular = tf.linalg.LinearOperatorLowerTriangular
             else:
-              tf_lower_triangular = tf.contrib.linalg.LinearOperatorTriL
-            tril = tf_lower_triangular(diag_vals).to_dense() # (T_q, T_k)
-            masks = tf.tile(tf.expand_dims(tril, 0), [tf.shape(outputs)[0], 1, 1]) # (h*N, T_q, T_k)
+                tf_lower_triangular = tf.contrib.linalg.LinearOperatorTriL
+            tril = tf_lower_triangular(diag_vals).to_dense()  # (T_q, T_k)
+            masks = tf.tile(
+                tf.expand_dims(tril, 0), [tf.shape(outputs)[0], 1, 1]
+            )  # (h*N, T_q, T_k)
 
-            paddings = tf.ones_like(masks)*(-2**32+1)
-            outputs = tf.where(tf.equal(masks, 0), paddings, outputs) # (h*N, T_q, T_k)
+            paddings = tf.ones_like(masks) * (-(2 ** 32) + 1)
+            outputs = tf.where(tf.equal(masks, 0), paddings, outputs)  # (h*N, T_q, T_k)
 
         # Activation
-        outputs = tf.nn.softmax(outputs) # (h*N, T_q, T_k)
+        outputs = tf.nn.softmax(outputs)  # (h*N, T_q, T_k)
 
-        alignments = tf.split(outputs, num_heads, axis=0) #  [ h x tensor(N, T_q, T_k) ]
-         
+        alignments = tf.split(
+            outputs, num_heads, axis=0
+        )  #  [ h x tensor(N, T_q, T_k) ]
+
         # Query Masking
         if cache is None:
-          if query_masks is None:
-            query_masks = tf.sign(tf.abs(tf.reduce_sum(queries, axis=-1))) # (N, T_q)
-          query_masks = tf.tile(query_masks, [num_heads, 1]) # (h*N, T_q)
-          query_masks = tf.tile(tf.expand_dims(query_masks, -1), [1, 1, tf.shape(keys)[1]]) # (h*N, T_q, T_k)
-          outputs *= query_masks # broadcasting. (N, T_q, C)
-          
+            if query_masks is None:
+                query_masks = tf.sign(
+                    tf.abs(tf.reduce_sum(queries, axis=-1))
+                )  # (N, T_q)
+            query_masks = tf.tile(query_masks, [num_heads, 1])  # (h*N, T_q)
+            query_masks = tf.tile(
+                tf.expand_dims(query_masks, -1), [1, 1, tf.shape(keys)[1]]
+            )  # (h*N, T_q, T_k)
+            outputs *= query_masks  # broadcasting. (N, T_q, C)
+
         # Dropouts
-        outputs = tf.layers.dropout(outputs,
-                                    rate=dropout_rate,
-                                    training=tf.convert_to_tensor(is_training))
-               
+        outputs = tf.layers.dropout(
+            outputs, rate=dropout_rate, training=tf.convert_to_tensor(is_training)
+        )
+
         # Weighted sum
-        outputs = tf.matmul(outputs, V_) # ( h*N, T_q, C/h)
-        
+        outputs = tf.matmul(outputs, V_)  # ( h*N, T_q, C/h)
+
         # Restore shape
-        outputs = tf.concat(tf.split(outputs, num_heads, axis=0), axis=2 ) # (N, T_q, C)
-              
+        outputs = tf.concat(tf.split(outputs, num_heads, axis=0), axis=2)  # (N, T_q, C)
+
         # Residual connection
         outputs += queries
-              
+
         # Normalize
-        outputs = normalize(outputs) # (N, T_q, C)
- 
+        outputs = normalize(outputs)  # (N, T_q, C)
+
     return outputs, alignments
 
-def feedforward(inputs,
-                num_units=[2048, 512],
-                add_skip_connection=True,
-                scope="feedforward",
-                reuse=None):
-    '''Point-wise feed forward net.
+
+def feedforward(
+    inputs,
+    num_units=[2048, 512],
+    add_skip_connection=True,
+    scope="feedforward",
+    reuse=None,
+):
+    """Point-wise feed forward net.
     
     Args:
       inputs: A 3d tensor with shape of [N, T, C].
@@ -310,29 +335,40 @@ def feedforward(inputs,
         
     Returns:
       A 3d tensor with the same shape and dtype as inputs
-    '''
+    """
     with tf.variable_scope(scope, reuse=reuse):
         # Inner layer
-        params = {"inputs": inputs, "filters": num_units[0], "kernel_size": 1,
-                  "activation": tf.nn.relu, "use_bias": True}
+        params = {
+            "inputs": inputs,
+            "filters": num_units[0],
+            "kernel_size": 1,
+            "activation": tf.nn.relu,
+            "use_bias": True,
+        }
         outputs = tf.layers.conv1d(**params)
-        
+
         # Readout layer
-        params = {"inputs": outputs, "filters": num_units[1], "kernel_size": 1,
-                  "activation": None, "use_bias": True}
+        params = {
+            "inputs": outputs,
+            "filters": num_units[1],
+            "kernel_size": 1,
+            "activation": None,
+            "use_bias": True,
+        }
         outputs = tf.layers.conv1d(**params)
-        
+
         # Residual connection
         if add_skip_connection:
-          outputs += inputs
-        
+            outputs += inputs
+
         # Normalize
         outputs = normalize(outputs)
-    
+
     return outputs
 
+
 def label_smoothing(inputs, epsilon=0.1):
-    '''Applies label smoothing. See https://arxiv.org/abs/1512.00567.
+    """Applies label smoothing. See https://arxiv.org/abs/1512.00567.
     
     Args:
       inputs: A 3d tensor with shape of [N, T, V], where V is the number of vocabulary.
@@ -364,10 +400,6 @@ def label_smoothing(inputs, epsilon=0.1):
         [ 0.93333334,  0.03333334,  0.03333334],
         [ 0.03333334,  0.93333334,  0.03333334]]], dtype=float32)]   
     ```    
-    '''
-    K = inputs.get_shape().as_list()[-1] # number of channels
-    return ((1-epsilon) * inputs) + (epsilon / K)
-    
-    
-
-            
+    """
+    K = inputs.get_shape().as_list()[-1]  # number of channels
+    return ((1 - epsilon) * inputs) + (epsilon / K)
