@@ -187,6 +187,13 @@ def load_args(default_config=None):
         help="How many times to perform the evaluation - used for averaging over test augmentation runs",
     )
 
+    parser.add_argument(
+        "--www",
+        default=False,
+        action="store_true",
+        help="save information to web-page demo",
+    )
+
     args = parser.parse_args()
 
     return args

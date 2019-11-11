@@ -82,6 +82,25 @@ def py_encode_gif(im_thwc, tag, fps=4, timeline=False, attention=[], preds=[]):
     return summ_str
 
 
+def save_gif(im_thwc, path):
+    FPS = 4
+
+    if not im_thwc.dtype == np.uint8:
+        im_thwc = im_thwc - im_thwc.min()
+        im_thwc = im_thwc / im_thwc.max()
+        im_thwc = (im_thwc * 255).astype(np.uint8)
+
+    if im_thwc.shape[-1] == 1:
+        import cv2
+        im_thwc = [cv2.cvtColor(g, cv2.COLOR_GRAY2RGB) for g in im_thwc]
+        im_thwc = np.array(im_thwc)
+
+    clip = mpy.ImageSequenceClip(list(im_thwc), fps=FPS)
+    clip.write_gif(path, verbose=False)
+
+    return 0
+
+
 def add_time_line(vid, width=4):
     """
   Adds a white bar on top of video to indicate time

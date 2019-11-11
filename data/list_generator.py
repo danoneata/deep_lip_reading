@@ -70,7 +70,7 @@ class ListGenerator:
         labels_batch = [self.label_vectorizer.vectorize(labels_batch)]
         frames_batch = [video_frames]
 
-        return [frames_batch, labels_batch]
+        return [frames_batch, labels_batch, vid]
 
     def strip_extension(self, path):
         _, file_extension = os.path.splitext(path)

@@ -12,6 +12,7 @@ from data.list_generator import ListGenerator
 from language_model.char_rnn_lm import CharRnnLmWrapperSingleton
 from lip_model.training_graph import TransformerTrainGraph
 from lip_model.inference_graph import TransformerInferenceGraph
+from util.tb_util import save_gif
 
 
 config = load_args()
@@ -20,6 +21,15 @@ graph_dict = {
     "train": TransformerTrainGraph,
     "infer": TransformerInferenceGraph,
 }
+
+
+def get_filename(path):
+    basename = os.path.basename(path)
+    filename = os.path.splitext(basename)[0]
+    return filename
+
+
+DIR_XTS = "/home/doneata/work/xts/www"
 
 
 def evaluate_model():
@@ -81,11 +91,15 @@ def validation_loop(sess, g, n_batches, chars=None, val_gen=None, tb_writer=None
     progbar = Progbar(target=n_batches, verbose=1, stateful_metrics=["t"])
     print("Strating validation Loop")
 
+    f = open(os.path.join(DIR_XTS, 'preds.txt'), 'w')
+
     for i in range(n_batches):
 
-        x, y = val_gen.next()
+        x, y, video_path = val_gen.next()
+
         if len(x) == 1:
             x = x[0]
+
         if len(y) == 1:
             y = y[0]
 
@@ -152,6 +166,22 @@ def validation_loop(sess, g, n_batches, chars=None, val_gen=None, tb_writer=None
         edists = [rel_edist(gt, dec_str) for gt, dec_str in zip(gt_words, pred_words)]
         wer = np.mean(edists)
 
+        filename = get_filename(video_path)
+
+        if config.www:
+            # Save input gif
+            padding_mask, frames = sess.run([g.padding_mask, g.visual_frontend.aug_out], feed_dict)
+            non_pad_idxs, *_ = np.where(padding_mask[0] > 0)
+            idx_s = non_pad_idxs[0]
+            idx_e = non_pad_idxs[-1] + 1
+            path = os.path.join(DIR_XTS, "data-vgg", filename + '_anima.gif')
+            save_gif(frames[0, idx_s: idx_e], path)
+            path = os.path.join(DIR_XTS, "data-vgg", filename + '_still.gif')
+            save_gif(frames[0, idx_s: idx_s + 1], path)
+
+        #
+        f.write(f"{filename} {pred_sentences[0]} {gt_sents[0]}\n")
+
         # -- Write tb_summaries if any
         if g.tb_sum is not None:
             tb_writer.add_summary(tb_sum, i)
@@ -167,6 +197,7 @@ def validation_loop(sess, g, n_batches, chars=None, val_gen=None, tb_writer=None
         Cer.append(cer)
         Loss.append(loss)
 
+    f.close()
     return np.average(Loss), np.average(Cer), np.average(Wer)
 
 
@@ -197,10 +228,12 @@ def init_models_and_data(istrain):
 
     go_idx = val_gen.label_vectorizer.char_indices[val_gen.label_vectorizer.go_token]
     x_val = tf.placeholder(dtypes_in[0], shape=shapes_in[0])
+
     prev_shape = list(shapes_out[0])
     if config.test_aug_times:
         prev_shape[0] *= config.test_aug_times
     prev_ph = tf.placeholder(dtypes_out[0], shape=prev_shape)
+
     y_ph = tf.placeholder(dtypes_out[0], shape=shapes_out[0])
     y_val = [prev_ph, y_ph]
 
@@ -216,7 +249,6 @@ def init_models_and_data(istrain):
     print("Validation Graph loaded")
 
     sess.run(tf.tables_initializer())
-
     load_checkpoints(sess)
 
     return val_g, val_epoch_size, chars, sess, val_gen
