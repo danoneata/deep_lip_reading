@@ -1,7 +1,11 @@
-from distutils.version import StrictVersion
+import copy
+import pdb
 
+import numpy as np
 import tensorflow as tf
+
 from tensorflow.python.util import nest
+from distutils.version import StrictVersion
 
 from config import load_args
 from language_model.char_rnn_lm import CharRnnLm, CharRnnLmWrapperSingleton
@@ -10,6 +14,7 @@ from lip_model.beam_search import log_prob_from_logits
 from lip_model.training_graph import TransformerTrainGraph
 from lip_model.modules import embedding, multihead_attention, feedforward
 from util.tf_util import shape_list
+
 
 config = load_args()
 
@@ -288,86 +293,84 @@ class TransformerInferenceGraph(TransformerTrainGraph):
         return symbols_to_logits_fn
 
     def get_lm_symbols_to_logprobs_handle(self, cache, logits_bs, top_scope):
-        # it should alreadhy have been inited
+        # it should already have been inited
         rnn_dict = CharRnnLmWrapperSingleton().rnn_clm
+
         self.clm_opts = rnn_dict["saved_args"]
         self.char_inds = dict((v, k) for k, v in enumerate(self.chars))
-        # ==============  Table and keys that map from lm -> lip ids ================
+        # ============= Table and keys that map from lm →  lip ids ============
         # The lip model has an extra 5 characters:
-        # 0: ' ' (pad) , 1: '!', 3: ',' 5: '.' and 45: '^' (go token)
-        # So we need to map from lip to lm indices to get the input to the LM and
-        # from lm to lip on the lm output ( probs )
-        # Table mapping lip --> lm
-        lip_to_lm_chars = dict(
-            [
-                (self.char_inds[chr], lm_idx)
-                for chr, lm_idx in rnn_dict["char_inds"].items()
-                if chr in self.char_inds
-            ]
-        )
+        # 0: ' ' (pad) , 1: '!', 3: ',' 5: '.' and 44: '^' (go token)
+        # We need to map from lip to LM indices to get the input to the LM and
+        # from LM to lip on the LM output (probs)
 
-        # We don't have a go token for the LM so replace this with '-' (space)
-        lip_to_lm_chars[self.go_token_idx] = rnn_dict["char_inds"]["-"]
-        # Map the lip padding to <space> for LM.
-        # We do this because we would like the end of the
-        # sentence to correspond to an end of a word
-        lip_to_lm_chars[0] = rnn_dict["char_inds"]["-"]
-        # Hashtable init crashes for int64 -> int32
+        # Table mapping: lip index →  lm index
+        lip_to_lm_chars = {
+            self.char_inds[c]: i
+            for c, i in rnn_dict["char_inds"].items()
+            if c in self.char_inds
+        }
+
+        TOKENS = {
+            "go": "^",
+            "pad": " ",
+        }
+
+        if TOKENS["go"] not in rnn_dict["char_inds"]:
+            # If we don't have a go token for the LM use the space '-'
+            lip_to_lm_chars[self.go_token_idx] = rnn_dict["char_inds"]["-"]
+
+        if TOKENS["pad"] not in rnn_dict["char_inds"]:
+            # Map the lip padding to <space> for LM.
+            # We do this because we would like the end of the
+            # sentence to correspond to an end of a word
+            lip_to_lm_chars[0] = rnn_dict["char_inds"]["-"]
+
+        # Hashtable init crashes for int64 →  int32
         keys = tf.constant(list(lip_to_lm_chars.keys()), dtype=tf.int64)
         values = tf.constant(list(lip_to_lm_chars.values()), dtype=tf.int64)
-        table = tf.contrib.lookup.HashTable(
-            tf.contrib.lookup.KeyValueTensorInitializer(keys, values), -1
-        )
-        # Keys mapping lm -> lip (used with gather to map 40 LM output probs to 45 characters)
-        import copy
+        table = tf.contrib.lookup.HashTable(tf.contrib.lookup.KeyValueTensorInitializer(keys, values), -1)
 
+        # Keys mapping lm →  lip (used with gather to map 40 LM output probs to 45 characters)
         lip_to_lm_chars_copy = copy.deepcopy(lip_to_lm_chars)  # just to make sure
-        # we only want the go token to be mapped to  lm '-' for lip -> lm and not the inverse
+
+        # We only want the go token to be mapped to lm '-' for lip →  lm and not the inverse
         del lip_to_lm_chars_copy[self.go_token_idx]
         chars2lip_keys = []
         for lip_idx in range(len(self.char_inds)):
-            chars2lip_keys.append(
-                lip_to_lm_chars_copy[lip_idx] if lip_idx in lip_to_lm_chars_copy else -1
-            )
-        import numpy as np
+            chars2lip_keys.append(lip_to_lm_chars_copy[lip_idx] if lip_idx in lip_to_lm_chars_copy else -1)
 
         chars2lip_keys = np.array(chars2lip_keys)
         zero_mask = 1 - (chars2lip_keys == -1).astype(np.float32)
         zero_mask_tf = tf.constant(zero_mask[None, :])
-        # Replace the -1, to avoid error on CPU
-        chars2lip_keys[
-            chars2lip_keys == -1
-        ] = 0  # 0 index doesn't matter as we will mask it
 
+        # Replace the -1, to avoid error on CPU
+        # 0 index doesn't matter as we will mask it
+        chars2lip_keys[chars2lip_keys == -1] = 0
         cache["lm_state"] = rnn_dict["model"].cell.zero_state(logits_bs, "float32")
 
-        # =============================================
         def lm_symbols_to_logprobs_fn(ids, unused_i, cache, inf_mask_tf=zero_mask_tf):
             """Go from ids to logits for next symbol."""
 
             ids = ids[:, -1:]
-            # Map from lip to lm indices
+            # Map from lip to LM indices
             lm_ids = table.lookup(ids)
 
             with tf.control_dependencies([tf.assert_non_negative(lm_ids, [lm_ids])]):
-                with tf.variable_scope(
-                    top_scope, reuse=True
-                ):  # we have initialized LM outside
+                with tf.variable_scope(top_scope, reuse=True):  # We have initialized LM outside
                     model_pl = CharRnnLm(
                         input_data=lm_ids,
                         initial_state=cache["lm_state"],
                         args=self.clm_opts,
                         training=False,
                     )
+
             probs_lm, cache["lm_state"] = model_pl.probs, model_pl.final_state
 
             lm_probs_mapped_to_lip = tf.gather(probs_lm, chars2lip_keys, axis=-1)
-            lm_probs_mapped_to_lip *= (
-                zero_mask_tf  # mask out indices with no lip correspondence
-            )
-            lm_logprobs = tf.log(
-                lm_probs_mapped_to_lip
-            )  # Entries with value 0 will get -Inf
+            lm_probs_mapped_to_lip *= zero_mask_tf  # Mask out indices with no lip correspondence
+            lm_logprobs = tf.log(lm_probs_mapped_to_lip)  # Entries with value 0 will get -Inf
+
             return lm_logprobs, cache
 
         return lm_symbols_to_logprobs_fn

@@ -418,29 +418,30 @@ def beam_search(
     def grow_topk(i, alive_seq, alive_log_probs, states):
         r"""Inner beam seach loop.
 
-    This function takes the current alive sequences, and grows them to topk
-    sequences where k = 2*beam. We use 2*beam because, we could have beam_size
-    number of sequences that might hit <EOS> and there will be no alive
-    sequences to continue. With 2*beam_size, this will not happen. This relies
-    on the assumption the vocab size is > beam size. If this is true, we'll
-    have at least beam_size non <EOS> extensions if we extract the next top
-    2*beam words.
-    Length penalty is given by = (5+len(decode)/6) ^ -\alpha. Pls refer to
-    https://arxiv.org/abs/1609.08144.
+        This function takes the current alive sequences, and grows them to topk
+        sequences where k = 2 * beam. We use 2 * beam because, we could have beam_size
+        number of sequences that might hit <EOS> and there will be no alive
+        sequences to continue. With 2 * beam_size, this will not happen. This relies
+        on the assumption the vocab size is > beam size. If this is true, we'll
+        have at least beam_size non <EOS> extensions if we extract the next top
+        2 * beam words.
+        Length penalty is given by = (5 + len(decode) / 6)^-α
+        Please refer to https://arxiv.org/abs/1609.08144.
 
-    Args:
-      i: loop index
-      alive_seq: Topk sequences decoded so far [batch_size, beam_size, i+1]
-      alive_log_probs: probabilities of these sequences. [batch_size, beam_size]
-      states: dict (possibly nested) of decoding states.
-    Returns:
-      Tuple of
-        (Topk sequences extended by the next word,
-         The log probs of these sequences,
-         The scores with length penalty of these sequences,
-         Flags indicating which of these sequences have finished decoding,
-         dict of transformed decoding states)
-    """
+        Args:
+          i: loop index
+          alive_seq: Topk sequences decoded so far [batch_size, beam_size, i+1]
+          alive_log_probs: probabilities of these sequences. [batch_size, beam_size]
+          states: dict (possibly nested) of decoding states.
+
+        Returns:
+          Tuple of
+            (Topk sequences extended by the next word,
+             The log probs of these sequences,
+             The scores with length penalty of these sequences,
+             Flags indicating which of these sequences have finished decoding,
+             dict of transformed decoding states)
+        """
         # Get the logits for all the possible next symbols
         flat_ids = tf.reshape(alive_seq, [batch_size * beam_size, -1])
 

@@ -22,19 +22,21 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR TH
 """
 import os
 
-import tensorflow as tf
 from six.moves import cPickle as pickle
+
+import numpy as np
+import tensorflow as tf
+
 from tensorflow.contrib import legacy_seq2seq
 from tensorflow.contrib import rnn
 
 
 class CharRnnLm:
-    def __init__(
-        self, args, training=False, input_data=None, targets=None, initial_state=None
-    ):
+    def __init__(self, args, training=False, input_data=None, targets=None, initial_state=None):
         self.args = args
+
         if not training:
-            # args.batch_size = 10
+            args.batch_size = 1
             args.seq_length = 1
 
         cells = []
@@ -122,6 +124,45 @@ class CharRnnLm:
             tf.summary.histogram("loss", loss)
             tf.summary.scalar("train_loss", self.cost)
 
+    def sample(self, sess, chars, vocab, num=200, prime='The ', sampling_type=1):
+        state = sess.run(self.cell.zero_state(1, tf.float32))
+
+        for char in prime[:-1]:
+            x = np.zeros((1, 1))
+            x[0, 0] = vocab[char]
+            feed = {self.input_data: x, self.initial_state: state}
+            [state] = sess.run([self.final_state], feed)
+
+        def weighted_pick(weights):
+            t = np.cumsum(weights)
+            s = np.sum(weights)
+            return int(np.searchsorted(t, np.random.rand(1) * s))
+
+        ret = prime
+        char = prime[-1]
+
+        for _ in range(num):
+            x = np.zeros((1, 1))
+            x[0, 0] = vocab[char]
+            feed = {self.input_data: x, self.initial_state: state}
+            [probs, state] = sess.run([self.probs, self.final_state], feed)
+            p = probs[0]
+
+            if sampling_type == 0:
+                sample = np.argmax(p)
+            elif sampling_type == 2:
+                if char == ' ':
+                    sample = weighted_pick(p)
+                else:
+                    sample = np.argmax(p)
+            else:  # sampling_type == 1 default:
+                sample = weighted_pick(p)
+
+            pred = chars[sample]
+            ret += pred
+            char = pred
+        return ret
+
 
 class CharRnnLmWrapperSingleton:
     # class singleton
@@ -141,9 +182,11 @@ class CharRnnLmWrapperSingleton:
         saved_args.batch_size = batch_size
 
         model = CharRnnLm(saved_args, training=False)
+
         if load_weights:
             if sess is None:
                 sess = tf.Session()
+
             with sess.as_default():
                 tf.global_variables_initializer().run()
                 saver = tf.train.Saver(tf.global_variables())
@@ -151,8 +194,13 @@ class CharRnnLmWrapperSingleton:
                 if ckpt and ckpt.model_checkpoint_path:
                     saver.restore(sess, ckpt.model_checkpoint_path)
 
+	# Remap characters to better align with the language model to the lip
+	# model: " "  →  "-" and "\n" →  " ".
         char_inds_lm["-"] = char_inds_lm[" "]
+        char_inds_lm[" "] = char_inds_lm["\n"]
         del char_inds_lm[" "]
+        del char_inds_lm["\n"]
+
         rnn_clm = {
             "model": model,
             "chars": chars_lm,
