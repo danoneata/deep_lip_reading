@@ -288,9 +288,8 @@ class TransformerInferenceGraph(TransformerTrainGraph):
         return symbols_to_logits_fn
 
     def get_lm_symbols_to_logprobs_handle(self, cache, logits_bs, top_scope):
-        rnn_dict = (
-            CharRnnLmWrapperSingleton().rnn_clm
-        )  # it should alreadhy have been inited
+        # it should alreadhy have been inited
+        rnn_dict = CharRnnLmWrapperSingleton().rnn_clm
         self.clm_opts = rnn_dict["saved_args"]
         self.char_inds = dict((v, k) for k, v in enumerate(self.chars))
         # ==============  Table and keys that map from lm -> lip ids ================
