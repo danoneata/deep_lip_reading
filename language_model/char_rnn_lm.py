@@ -46,6 +46,7 @@ class CharRnnLm:
                 cell = tf.nn.rnn_cell.LSTMCell(args.rnn_size, name="basic_lstm_cell")
             else:
                 cell = tf.nn.rnn_cell.BasicLSTMCell(args.rnn_size)
+
             if training and (args.output_keep_prob < 1.0 or args.input_keep_prob < 1.0):
                 cell = rnn.DropoutWrapper(
                     cell,
