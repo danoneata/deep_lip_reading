@@ -1,4 +1,5 @@
 import os
+import pdb
 import shutil
 
 import editdistance
@@ -257,6 +258,7 @@ def init_models_and_data(istrain):
 def load_checkpoints(sess, var_scopes=("encoder", "decoder", "dense")):
 
     checkpoint_path = config.lip_model_path
+
     if checkpoint_path:
         if os.path.isdir(checkpoint_path):
             checkpoint = tf.train.latest_checkpoint(checkpoint_path)
@@ -267,7 +269,6 @@ def load_checkpoints(sess, var_scopes=("encoder", "decoder", "dense")):
 
         if checkpoint_path:
             from tensorflow.contrib.framework.python.framework import checkpoint_utils
-
             var_list = checkpoint_utils.list_variables(checkpoint)
             for var in var_list:
                 if "visual_frontend" in var[0]:
@@ -276,22 +277,16 @@ def load_checkpoints(sess, var_scopes=("encoder", "decoder", "dense")):
 
         if not "visual_frontend" in var_scopes:
             featurizer_vars = tf.global_variables(scope="visual_frontend")
-            featurizer_ckpt = tf.train.get_checkpoint_state(
-                config.featurizer_model_path
-            )
+            featurizer_ckpt = tf.train.get_checkpoint_state(config.featurizer_model_path)
             featurizer_vars = [var for var in featurizer_vars if not "Adam" in var.name]
-            tf.train.Saver(featurizer_vars).restore(
-                sess, featurizer_ckpt.model_checkpoint_path
-            )
+            tf.train.Saver(featurizer_vars).restore(sess, featurizer_ckpt.model_checkpoint_path)
 
     all_variables = []
     for scope in var_scopes:
-        all_variables += [
-            var for var in tf.global_variables(scope=scope) if not "Adam" in var.name
-        ]
+        all_variables += [var for var in tf.global_variables(scope=scope) if not "Adam" in var.name]
+
     if checkpoint_path:
         tf.train.Saver(all_variables).restore(sess, checkpoint)
-
         print("Restored saved model {}!".format(checkpoint))
 
 

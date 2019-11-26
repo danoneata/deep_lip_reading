@@ -315,6 +315,27 @@ class TransformerTrainGraph:
             self.cer, self.cer_per_sample = cer(self.y_one_hot, one_hot_from_preds, return_all=True)
         # fmt: on
 
+        if is_training:
+            with tf.name_scope("optimizer"):
+                optimizer = tf.train.AdamOptimizer(learning_rate=0.0001)
+            self.train_op = optimizer.minimize(self.mean_loss)
+
+            # instrument tensorboard
+            tf.summary.histogram("logits", self.logits)
+            tf.summary.histogram("loss", self.loss)
+            tf.summary.scalar("cer", self.cer)
+            self.add_text_summaries()
+
+    def add_text_summaries(self):
+        p = self.char_table.lookup(tf.cast(self.preds, tf.int64))
+        p = tf.string_join(tf.split(p, p.shape[1], 1))[:, 0]
+
+        g = self.char_table.lookup(tf.cast(self.y, tf.int64))
+        g = tf.string_join(tf.split(g, g.shape[1], 1))[:, 0]
+
+        j = tf.string_join([g, p], " →  ")
+        tf.summary.text("Predictions", j)
+
     def add_tb_summaries(self):
         from util.tb_util import add_gif_summary, colorize_image
 
@@ -358,16 +379,7 @@ class TransformerTrainGraph:
             )
 
         # ----------------   Add text summaries -------------------------------
-        pred_strings_tf = self.char_table.lookup(tf.cast(self.preds, tf.int64))
-        joined_pred = tf.string_join(
-            tf.split(pred_strings_tf, pred_strings_tf.shape[1], 1)
-        )[:, 0]
-        gt_strings_tf = self.char_table.lookup(tf.cast(self.y, tf.int64))
-        joined_gt = tf.string_join(
-            tf.split(gt_strings_tf, pred_strings_tf.shape[1], 1)
-        )[:, 0]
-        joined_all = tf.string_join([joined_gt, joined_pred], " --> ")
-        tf.summary.text("Predictions", joined_all)
+        self.add_text_summaries()
 
         # ----------------   Add image summaries -------------------------------
         all_atts = []
