@@ -47,12 +47,13 @@ def init_models_and_data():
     print("→  Graph loaded")
 
     sess.run(tf.tables_initializer())
+    sess.run(tf.global_variables_initializer())
+
     load_checkpoints(sess)
 
     return g, epoch_size, chars, sess, gen
 
 g, epoch_size, chars, sess, gen = init_models_and_data()
-sess.run(tf.global_variables_initializer())
 
 # Instrument for tensorboard
 summaries = tf.summary.merge_all()
